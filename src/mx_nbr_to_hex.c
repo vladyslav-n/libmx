@@ -1,16 +1,15 @@
 #include "../inc/libmx.h"
 
-unsigned long hexstrsize(unsigned long n)
-{
+static unsigned long hexstrsize(unsigned long n) {
 	unsigned long size = 1;
 	unsigned long nbr = n;
+
 	while (nbr >>= 4)
 		size += 1;
 	return size;
 }
 
-char digit_to_hexchar(short int d)
-{
+static char digit_to_hexchar(short int d) {
 	if (d >= 0 && d <= 9)
 		return d + 48;
 	if (10 == d)
@@ -28,20 +27,16 @@ char digit_to_hexchar(short int d)
 	return '!';
 }
 
-char *mx_nbr_to_hex(unsigned long nbr)
-{
+char *mx_nbr_to_hex(unsigned long nbr) {
 	unsigned long n = nbr;
 	unsigned long size = hexstrsize(n);
 	char *hex = (char*) malloc(sizeof(char) * (size + 1));
+
 	hex[size] = 0;
-	for (unsigned long i = 0; i < size; i++)
-	{	
+	for (unsigned long i = 0; i < size; i++) {	
 		hex[size - 1 - i] = digit_to_hexchar(n % 16);
 		n >>= 4;
 	}
-	#ifdef DEBUG
-		printf("%s\n", hex);
-	#endif
 	return hex;
 }
 

@@ -1,117 +1,82 @@
 #include "../inc/libmx.h"
-// #ifdef DEBUG
-// #endif
 
-int mx_read_line(char **lineptr, size_t buf_size, char delim, const int fd)
-{
-    int res = 0;
-    size_t read_bytes = 0;
-    static t_str_len tail;
-    if (!tail.s) {
-        tail.s = mx_strnew(buf_size);
+static void read_less_bufsize(t_tmp *tmp, t_read_bytes *bytes) {
+    bytes->buffer = mx_strndup(bytes->buffer, bytes->read);
+    free(tmp->buf);
+    tmp->buf = NULL;
+    bytes->buf_sz = bytes->read;
+    tmp->flag = -2;
+}
+
+static void at_eof(t_tmp *tmp, t_str_len *tail,
+t_delim *del, t_read_bytes *bytes) {
+    while (tail->s[0] && (del->ind = mx_get_char_index(tail->s,
+        del->c)) >= 0) {
+        mx_push_back(&(tmp->strlist), mx_strndup(tail->s, del->ind));
+        tmp->str_sum_len += del->ind;
+        bytes->res += del->ind;
+        tail->s = mx_strdup(tail->s + del->ind + 1);
+        tail->len -= del->ind + 1;
+        free(tmp->s);
+        tmp->s = tail->s;
     }
-    char *s_tmp = tail.s;
-    char *buf = mx_strnew(buf_size);
-    char *buf_tmp = buf;
-    int ind_delim = -3;
-    char flag = -1;
+    mx_push_back(&(tmp->strlist), mx_strdup(tail->s));
+    tmp->str_sum_len += tail->len;
+    bytes->res += tail->len;
+    tail->s = mx_strnew(0);
+    tail->len = 0;
+    free(tmp->s);
+    tmp->s = tail->s;
+}
 
-    read_bytes = read(fd, buf, buf_size);
-    
-    /* error case */
-    if (errno) {
-        free(buf);
-        buf = NULL;
-        return -2;
-    }
-
-    while (read_bytes >= 0)
-    {
-        /* case when we read all buf_size chars */
-        if (read_bytes == buf_size) {
-            if (flag == 3) {
-                flag = -1; 
-            }
-
-            if ((ind_delim = mx_get_char_index(tail.s, delim)) >= 0) {
-                mx_strncpy(*lineptr, tail.s, ind_delim);
-                *lineptr += ind_delim;
-                res += ind_delim;
-                tail.s = mx_strjoin(tail.s + ind_delim + 1, buf);
-                tail.len += buf_size - ind_delim - 1;
-            }
-            else if ((ind_delim = mx_get_char_index(buf, delim)) >= 0) {
-                mx_strcpy(*lineptr, tail.s);
-                mx_strncpy(*lineptr + tail.len, buf, ind_delim);
-                *lineptr += tail.len + ind_delim;
-                res += tail.len + ind_delim;
-                tail.s = mx_strdup(buf + ind_delim + 1);
-                tail.len = buf_size - ind_delim - 1;
-            }
-            else {
-                mx_strcpy(*lineptr, tail.s);
-                mx_strcpy(*lineptr + tail.len, buf);
-                *lineptr += tail.len + buf_size;
-                res += tail.len + buf_size;
-                tail.s = mx_strnew(0);
-                tail.len = 0;
-                if (flag == -1) {
-                    flag = 3; 
-                }
-            }
-            free(s_tmp);
-            s_tmp = tail.s;
-            if (flag == 3) {
-                read_bytes = read(fd, buf, buf_size);
+static void cycle(t_tmp *tmp, t_str_len *tail,
+t_delim *del, t_read_bytes *bytes) {
+    while (bytes->read > 0) {
+        if (bytes->read == bytes->buf_sz) {
+            mx_bufsize_chars_read(tmp, tail, del, bytes);
+            if (tmp->flag == 3) {
+                bytes->read = read(tmp->fd, bytes->buffer, bytes->buf_sz);
                 continue;
             }
-            break;
-        }
-
-        /* case when we read less than buf_size chars but not 0 */
-        else if (read_bytes) {
-            buf = mx_strndup(buf, read_bytes);
-            free(buf_tmp);
-            buf_tmp = NULL;
-            buf_size = read_bytes;
-            flag = -2;
-            continue;
-        }
-
-        /* case when cursor is at the EOF */
-        if (!res) {
-            free(buf);
-            buf = NULL;
-            if (!tail.s[0])
-                return -1;
-            while (tail.s[0]) {
-                if ((ind_delim = mx_get_char_index(tail.s, delim)) >= 0) {
-                    mx_strncpy(*lineptr, tail.s, ind_delim);
-                    *lineptr += ind_delim;
-                    res += ind_delim;
-                    tail.s = mx_strdup(tail.s + ind_delim + 1);
-                    tail.len -= ind_delim + 1;
-                    free(s_tmp);
-                    s_tmp = tail.s;
-                    continue;
-                }
-                break;
-            }
-            mx_strcpy(*lineptr, tail.s);
-            *lineptr += tail.len;
-            res += tail.len;
-            tail.s = mx_strnew(0);
-            tail.len = 0;
-            free(s_tmp);
-            s_tmp = tail.s;
-            return res;
+            return;
         }
         else {
-            break;
+            read_less_bufsize(tmp, bytes);
         }
     }
-    free(buf);
-    buf = NULL;
-    return res;
+    if (!bytes->res) {
+        if (!tail->s[0]) 
+            bytes->res = -1;
+        else
+            at_eof(tmp, tail, del, bytes);
+    }
+}
+
+static void clear(char **buffer, t_list **str_list){
+    free(*buffer);
+    *buffer = NULL;
+    mx_clear_list(str_list);
+}
+
+int mx_read_line(char **lineptr, size_t buf_size, char delim, const int fd) {
+    static t_str_len tail;
+    t_read_bytes bytes = {0, 0, buf_size, mx_strnew(buf_size)};
+    t_tmp tmp = {bytes.buffer, NULL, -1, lineptr, fd,
+    mx_create_node(mx_strnew(0)), 0};
+    t_delim del = {delim, -3};
+
+    if (!tail.s)
+        tail.s = mx_strnew(bytes.buf_sz);
+    tmp.s = tail.s;
+    bytes.read = read(fd, bytes.buffer, bytes.buf_sz);
+    /* error case */
+    if (errno) {
+        clear(&(bytes.buffer), &(tmp.strlist));
+        return -2;
+    }
+    cycle(&tmp, &tail, &del, &bytes);
+    mx_write_str_list(tmp.strlist, tmp.str_sum_len, lineptr);
+    clear(&(bytes.buffer), &(tmp.strlist));
+    return bytes.res;
 }
 

@@ -1,7 +1,6 @@
 #include "../inc/libmx.h"
 
-char hexchar(char c)
-{
+static char hexchar(char c) {
 	if (mx_isdigit(c))
 		return c;
 	if ('a' == c || 'A' == c)
@@ -16,14 +15,16 @@ char hexchar(char c)
 		return 62;
 	if ('f' == c || 'F' == c)
 		return 63;
-	else return 0;
+	else 
+		return 0;
 }
 
 unsigned long mx_hex_to_nbr(const char *hex) {
-	if (!hex)
-		return 0;
 	unsigned long num = 0;
 	unsigned long i = 0;
+
+	if (!hex)
+		return 0;
 	while (hexchar(hex[i])) {
 		num = num * 16 + hexchar(hex[i]) - 48;
 		i++;

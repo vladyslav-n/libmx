@@ -1,7 +1,6 @@
-#include<unistd.h>
-void mx_printchar(char c);
+#include "../inc/libmx.h"
 
-void print_pos(int n) {
+static void print_pos(int n) {
 	if (n > 9) {
 		print_pos(n / 10);
 	}
@@ -9,21 +8,17 @@ void print_pos(int n) {
 } 
 
 void mx_printint(int n) {
-	if (n < 0) 
-	{
-		if (n == -2147483648)
-		{
+	if (n < 0) {
+		if (n == -2147483648) {
 			write(1, "-2147483648", 11);
 		}
-		else 
-		{
+		else {
 			n = -n;
 			mx_printchar('-');
 			print_pos(n);
 		}
 	}
-	else 
-	{
+	else {
 		print_pos(n);
 	}
 }
